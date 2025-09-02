@@ -7,6 +7,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.core.view.WindowCompat
+import java.util.Stack
 
 class MainActivity : ComponentActivity() {
 
@@ -47,8 +48,7 @@ class MainActivity : ComponentActivity() {
 
         val operationButtons = listOf(
             R.id.button_plus, R.id.button_minus,
-            R.id.button_multiply, R.id.button_divide,
-            R.id.button_percent
+            R.id.button_multiply, R.id.button_divide
         )
 
         for (id in operationButtons) {
@@ -56,10 +56,15 @@ class MainActivity : ComponentActivity() {
                 isNewCalculation = false
                 if (currentExpression.isNotEmpty() && isLastCharOperator(currentExpression)) {
                     currentExpression = currentExpression.dropLast(1) + (it as Button).text.toString()
-                } else {
+                } else if (currentExpression.isNotEmpty() || (it as Button).text.toString() == "-") {
                     appendToExpression((it as Button).text.toString())
                 }
             }
+        }
+
+        findViewById<Button>(R.id.button_percent).setOnClickListener {
+            // معالجة زر النسبة المئوية بشكل خاص
+            handlePercent()
         }
 
         findViewById<Button>(R.id.button_decimal).setOnClickListener {
@@ -67,6 +72,7 @@ class MainActivity : ComponentActivity() {
                 currentExpression = "0"
                 isNewCalculation = false
             }
+            // التأكد من عدم إضافة نقطة عشرية إذا كان الرقم الحالي يحتوي عليها بالفعل
             val parts = currentExpression.split('+', '-', 'x', '÷', '%')
             if (parts.isNotEmpty() && !parts.last().contains(".")) {
                 appendToExpression(".")
@@ -94,7 +100,7 @@ class MainActivity : ComponentActivity() {
     private fun isLastCharOperator(expression: String): Boolean {
         if (expression.isEmpty()) return false
         val lastChar = expression.last()
-        return lastChar == '+' || lastChar == '-' || lastChar == 'x' || lastChar == '÷' || lastChar == '%'
+        return lastChar == '+' || lastChar == '-' || lastChar == 'x' || lastChar == '÷'
     }
 
     private fun appendToExpression(value: String) {
@@ -130,7 +136,7 @@ class MainActivity : ComponentActivity() {
 
     private fun toggleSign() {
         if (currentExpression.isNotEmpty() && currentExpression != "0" && currentExpression != "Error") {
-            val operators = setOf('+', '-', 'x', '÷', '%')
+            val operators = setOf('+', '-', 'x', '÷')
             var lastNumberStart = -1
 
             for (i in currentExpression.length - 1 downTo 0) {
@@ -158,6 +164,51 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun handlePercent() {
+        if (currentExpression.isEmpty()) return
+
+        val operators = setOf('+', '-', 'x', '÷')
+        var lastOperatorIndex = -1
+
+        for (i in currentExpression.length - 1 downTo 0) {
+            if (currentExpression[i] in operators) {
+                lastOperatorIndex = i
+                break
+            }
+        }
+
+        if (lastOperatorIndex == -1) { // لا يوجد عامل حسابي، الرقم كله نسبة مئوية
+            try {
+                val number = currentExpression.toDouble()
+                currentExpression = (number / 100).toString()
+            } catch (e: NumberFormatException) {
+                textResult.text = "Error"
+                currentExpression = ""
+            }
+        } else { // يوجد عامل حسابي
+            val lastNumberStr = currentExpression.substring(lastOperatorIndex + 1)
+            try {
+                val lastNumber = lastNumberStr.toDouble()
+                val prevExpression = currentExpression.substring(0, lastOperatorIndex)
+                val prevResult = eval(prevExpression.replace("x", "*").replace("÷", "/")) // نحتاج لحساب الجزء السابق
+                val percentageValue = (prevResult * lastNumber) / 100
+
+                // استبدال الجزء الأخير من التعبير بالقيمة الناتجة عن النسبة المئوية
+                val operator = currentExpression[lastOperatorIndex]
+                if (operator == '+' || operator == '-') {
+                    currentExpression = prevExpression + operator + percentageValue
+                } else { // للضرب والقسمة
+                    currentExpression = prevExpression + operator + (lastNumber / 100)
+                }
+
+            } catch (e: Exception) {
+                textResult.text = "Error"
+                currentExpression = ""
+            }
+        }
+        textResult.text = currentExpression
+    }
+
 
     private fun calculateResult() {
         if (currentExpression.isEmpty()) {
@@ -171,10 +222,12 @@ class MainActivity : ComponentActivity() {
             val replaced = currentExpression
                 .replace("x", "*")
                 .replace("÷", "/")
-                .replace("%", "*0.01")
+            // تم حذف معالجة النسبة المئوية هنا، لأنها ستتم في handlePercent()
+            // .replace("%", "/100")
 
             val result = eval(replaced)
 
+            // انقل التعبير الأصلي إلى textExpression
             textExpression.text = currentExpression
 
             val formattedResult = if (result == result.toLong().toDouble()) {
@@ -183,6 +236,7 @@ class MainActivity : ComponentActivity() {
                 String.format("%.10f", result).trimEnd('0').trimEnd('.')
             }
 
+            // عرض النتيجة في textResult (التكست الكبير)
             textResult.text = formattedResult
 
             currentExpression = formattedResult
@@ -261,8 +315,6 @@ class MainActivity : ComponentActivity() {
                 } else {
                     throw RuntimeException("Unexpected: " + ch.toChar())
                 }
-
-                if (eat('%'.toInt())) x /= 100.0
                 return x
             }
         }.parse()
