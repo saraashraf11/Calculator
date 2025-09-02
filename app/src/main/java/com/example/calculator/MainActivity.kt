@@ -7,7 +7,6 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.core.view.WindowCompat
-import java.util.Stack
 
 class MainActivity : ComponentActivity() {
 
@@ -63,7 +62,6 @@ class MainActivity : ComponentActivity() {
         }
 
         findViewById<Button>(R.id.button_percent).setOnClickListener {
-            // معالجة زر النسبة المئوية بشكل خاص
             handlePercent()
         }
 
@@ -72,7 +70,6 @@ class MainActivity : ComponentActivity() {
                 currentExpression = "0"
                 isNewCalculation = false
             }
-            // التأكد من عدم إضافة نقطة عشرية إذا كان الرقم الحالي يحتوي عليها بالفعل
             val parts = currentExpression.split('+', '-', 'x', '÷', '%')
             if (parts.isNotEmpty() && !parts.last().contains(".")) {
                 appendToExpression(".")
@@ -104,11 +101,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun appendToExpression(value: String) {
-        if (isNewCalculation && value.matches(Regex("[0-9.]"))) {
+        if (isNewCalculation) {
             currentExpression = value
             isNewCalculation = false
-        } else if (currentExpression == "0" && value != ".") {
-            currentExpression = value
         } else {
             currentExpression += value
         }
@@ -177,7 +172,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        if (lastOperatorIndex == -1) { // لا يوجد عامل حسابي، الرقم كله نسبة مئوية
+        if (lastOperatorIndex == -1) {
             try {
                 val number = currentExpression.toDouble()
                 currentExpression = (number / 100).toString()
@@ -185,19 +180,18 @@ class MainActivity : ComponentActivity() {
                 textResult.text = "Error"
                 currentExpression = ""
             }
-        } else { // يوجد عامل حسابي
+        } else {
             val lastNumberStr = currentExpression.substring(lastOperatorIndex + 1)
             try {
                 val lastNumber = lastNumberStr.toDouble()
                 val prevExpression = currentExpression.substring(0, lastOperatorIndex)
-                val prevResult = eval(prevExpression.replace("x", "*").replace("÷", "/")) // نحتاج لحساب الجزء السابق
+                val prevResult = eval(prevExpression.replace("x", "*").replace("÷", "/"))
                 val percentageValue = (prevResult * lastNumber) / 100
 
-                // استبدال الجزء الأخير من التعبير بالقيمة الناتجة عن النسبة المئوية
                 val operator = currentExpression[lastOperatorIndex]
                 if (operator == '+' || operator == '-') {
                     currentExpression = prevExpression + operator + percentageValue
-                } else { // للضرب والقسمة
+                } else {
                     currentExpression = prevExpression + operator + (lastNumber / 100)
                 }
 
@@ -222,12 +216,9 @@ class MainActivity : ComponentActivity() {
             val replaced = currentExpression
                 .replace("x", "*")
                 .replace("÷", "/")
-            // تم حذف معالجة النسبة المئوية هنا، لأنها ستتم في handlePercent()
-            // .replace("%", "/100")
 
             val result = eval(replaced)
 
-            // انقل التعبير الأصلي إلى textExpression
             textExpression.text = currentExpression
 
             val formattedResult = if (result == result.toLong().toDouble()) {
@@ -236,14 +227,13 @@ class MainActivity : ComponentActivity() {
                 String.format("%.10f", result).trimEnd('0').trimEnd('.')
             }
 
-            // عرض النتيجة في textResult (التكست الكبير)
             textResult.text = formattedResult
 
             currentExpression = formattedResult
 
         } catch (e: DivisionByZeroException) {
             Toast.makeText(this, "مأخدتش في الكلاس ان القسمة علي الصفر متنفعش 😂", Toast.LENGTH_LONG).show()
-            textResult.text = "Undefined"
+            textResult.text = "0"
             currentExpression = ""
         } catch (e: Exception) {
             textResult.text = "Error"
