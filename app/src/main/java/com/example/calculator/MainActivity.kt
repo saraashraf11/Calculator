@@ -53,19 +53,32 @@ class MainActivity : ComponentActivity() {
         for (id in operationButtons) {
             findViewById<Button>(id).setOnClickListener {
                 isNewCalculation = false
-                if (currentExpression.isNotEmpty() && isLastCharOperator(currentExpression)) {
-                    currentExpression = currentExpression.dropLast(1) + (it as Button).text.toString()
-                } else if (currentExpression.isNotEmpty() || (it as Button).text.toString() == "-") {
-                    appendToExpression((it as Button).text.toString())
+                val operator = (it as Button).text.toString()
+                if (currentExpression.isNotEmpty()) {
+                    val lastChar = currentExpression.trim().lastOrNull()
+                    if (isOperator(lastChar)) {
+                        val trimmedExpression = currentExpression.trim()
+                        val newExpression = trimmedExpression.substring(0, trimmedExpression.length - 1) + operator
+                        currentExpression = newExpression.trim()
+                    } else if (lastChar == '.') {
+                        Toast.makeText(this, "Invalid syntax", Toast.LENGTH_SHORT).show()
+                    }
+                    else {
+                        currentExpression = "${currentExpression.trim()} $operator "
+                    }
+                } else if (operator == "-") {
+                    currentExpression = "$operator "
                 }
+                textResult.text = currentExpression.trim()
             }
         }
 
         findViewById<Button>(R.id.button_percent).setOnClickListener {
-            if (currentExpression.isNotEmpty() && !isLastCharOperator(currentExpression) && currentExpression.last() != '%') {
-                appendToExpression("%")
+            if (currentExpression.isNotEmpty() && !isOperator(currentExpression.trim().lastOrNull()) && currentExpression.trim().lastOrNull() != '%') {
+                currentExpression = currentExpression.trim() + "%"
                 isNewCalculation = false
             }
+            textResult.text = currentExpression.trim()
         }
 
         findViewById<Button>(R.id.button_decimal).setOnClickListener {
@@ -73,7 +86,7 @@ class MainActivity : ComponentActivity() {
                 currentExpression = "0"
                 isNewCalculation = false
             }
-            val parts = currentExpression.split('+', '-', 'x', '÷', '%')
+            val parts = currentExpression.split('+', '-', 'x', '÷', '%').map { it.trim() }
             if (parts.isNotEmpty() && !parts.last().contains(".")) {
                 appendToExpression(".")
             }
@@ -97,10 +110,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun isOperator(char: Char?): Boolean {
+        return char == '+' || char == '-' || char == 'x' || char == '÷'
+    }
+
     private fun isLastCharOperator(expression: String): Boolean {
         if (expression.isEmpty()) return false
-        val lastChar = expression.last()
-        return lastChar == '+' || lastChar == '-' || lastChar == 'x' || lastChar == '÷'
+        val lastChar = expression.trim().last()
+        return isOperator(lastChar)
     }
 
     private fun appendToExpression(value: String) {
@@ -108,9 +125,14 @@ class MainActivity : ComponentActivity() {
             currentExpression = value
             isNewCalculation = false
         } else {
-            currentExpression += value
+            val trimmedCurrent = currentExpression.trim()
+            if (trimmedCurrent.isNotEmpty() && (isOperator(trimmedCurrent.last()) || trimmedCurrent.last() == '%')) { // تم التعديل هنا
+                currentExpression = "$currentExpression$value"
+            } else {
+                currentExpression += value
+            }
         }
-        textResult.text = currentExpression
+        textResult.text = currentExpression.trim()
     }
 
     private fun clearAll() {
@@ -126,9 +148,13 @@ class MainActivity : ComponentActivity() {
             textResult.text = "0"
             textExpression.text = ""
         } else if (currentExpression.isNotEmpty()) {
+            val lastChar = currentExpression.last()
             currentExpression = currentExpression.dropLast(1)
-            textResult.text = if (currentExpression.isEmpty()) "0" else currentExpression
-            if (currentExpression.isEmpty()) {
+            if (lastChar == ' ' && currentExpression.isNotEmpty() && isOperator(currentExpression.last())) {
+                currentExpression = currentExpression.dropLast(1).trimEnd()
+            }
+            textResult.text = if (currentExpression.trim().isEmpty()) "0" else currentExpression.trim()
+            if (currentExpression.trim().isEmpty()) {
                 isNewCalculation = true
             }
         } else {
@@ -137,111 +163,104 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun toggleSign() {
-        if (currentExpression.isEmpty() || currentExpression == "0" || currentExpression == "Error") {
-            return // لا شيء لتغييره
+        if (currentExpression.trim().isEmpty() || currentExpression.trim() == "0" || currentExpression.trim() == "Error") {
+            return
         }
 
-        val operators = setOf('+', '-', 'x', '÷') // لا نعتبر % عامل تشغيل للإشارة
+        val operatorsAndPercent = setOf('+', '-', 'x', '÷', '%')
+
+        val normalizedExpression = currentExpression
+            .replace(Regex("\\s*([+\\-x÷])\\s*"), " $1 ")
+            .trim()
 
         var lastNumberStart = -1
-        var lastNumberEnd = currentExpression.length
+        var lastNumberEnd = normalizedExpression.length
 
-        // البحث عن بداية آخر رقم
-        for (i in currentExpression.length - 1 downTo 0) {
-            if (currentExpression[i] in operators) {
-                // إذا كان العامل هو '-' وكان يسبق مباشرة رقم، فقد يكون جزءًا من الرقم السالب
-                // مثال: "5+-3" هنا '-' جزء من الرقم
-                // مثال: "5-3" هنا '-' عامل تشغيل
-                if (currentExpression[i] == '-' && (i == 0 || currentExpression[i-1] in operators || currentExpression[i-1] == '(')) {
-                    lastNumberStart = i // بدأ الرقم السالب هنا
+        for (i in normalizedExpression.length - 1 downTo 0) {
+            if (normalizedExpression[i] in operatorsAndPercent) {
+                if (normalizedExpression[i] == '-' && (i == 0 || normalizedExpression.getOrNull(i - 1) == ' ' || normalizedExpression.getOrNull(i-1) in operatorsAndPercent)) {
+                    lastNumberStart = i
                 } else {
-                    lastNumberStart = i + 1 // الرقم يبدأ بعد العامل
+                    lastNumberStart = i + 1
                 }
                 break
             }
         }
 
-        if (lastNumberStart == -1) { // إذا لم يتم العثور على عامل تشغيل، فإن التعبير بأكمله هو رقم
+        if (lastNumberStart == -1) {
             lastNumberStart = 0
         }
 
-        val lastNumberStr = currentExpression.substring(lastNumberStart, lastNumberEnd)
+        val lastNumberStr = normalizedExpression.substring(lastNumberStart, lastNumberEnd).trim()
 
         if (lastNumberStr.isNotEmpty()) {
             val newNumberStr = if (lastNumberStr.startsWith("-")) {
-                lastNumberStr.substring(1) // إزالة الإشارة السالبة
+                lastNumberStr.substring(1)
             } else {
-                "-$lastNumberStr" // إضافة الإشارة السالبة
+                "-$lastNumberStr"
             }
-            currentExpression = currentExpression.substring(0, lastNumberStart) + newNumberStr
-            textResult.text = currentExpression
+            currentExpression = normalizedExpression.substring(0, lastNumberStart) + newNumberStr
+            textResult.text = currentExpression.trim()
         }
     }
 
     private fun calculateResult() {
-        if (currentExpression.isEmpty()) {
+        if (currentExpression.trim().isEmpty()) {
             return
         }
         try {
-            if (isLastCharOperator(currentExpression)) {
-                currentExpression = currentExpression.dropLast(1)
+            var expressionToEvaluate = currentExpression.trim()
+            if (isLastCharOperator(expressionToEvaluate)) {
+                expressionToEvaluate = expressionToEvaluate.dropLast(1).trim()
             }
 
-            var expressionToEvaluate = currentExpression
+            expressionToEvaluate = expressionToEvaluate
                 .replace("x", "*")
                 .replace("÷", "/")
+                .replace(Regex("\\s+"), "")
 
-
-            val percentPattern = Regex("(\\d+\\.?\\d*)%")
+            val percentPattern = Regex("(-?\\d+\\.?\\d*)%")
             if (expressionToEvaluate.matches(percentPattern)) {
                 val number = expressionToEvaluate.dropLast(1).toDouble()
                 expressionToEvaluate = (number / 100).toString()
             } else {
-                val parts = expressionToEvaluate.split(Regex("(?<=[+\\-*/])|(?=[+\\-*/])"))
-                val newParts = mutableListOf<String>()
+                val parts = expressionToEvaluate.split(Regex("(?<=[+\\-*/])|(?=[+\\-*/])")).toMutableList()
                 var i = 0
                 while (i < parts.size) {
-                    val part = parts[i].trim()
+                    val part = parts[i]
                     if (part.endsWith("%")) {
                         val num = part.dropLast(1).toDouble()
-                        if (newParts.size >= 2) {
-                            val prevOperator = newParts[newParts.size - 1]
-                            val prevNumber = newParts[newParts.size - 2].toDouble()
+                        if (i > 0) {
+                            val prevOperator = parts[i - 1]
+                            val prevNumberStr = if (i - 2 >= 0) parts[i - 2] else ""
+                            val prevNumber = prevNumberStr.toDoubleOrNull()
 
-                            when (prevOperator) {
-                                "+", "-" -> {
-                                    newParts.removeAt(newParts.size - 1)
-                                    newParts.removeAt(newParts.size - 1)
-                                    val percentageValue = (prevNumber * num) / 100
-                                    newParts.add(prevNumber.toString())
-                                    newParts.add(prevOperator)
-                                    newParts.add(percentageValue.toString())
+                            if (prevNumber != null) {
+                                when (prevOperator) {
+                                    "+", "-" -> {
+                                        val percentageValue = (prevNumber * num) / 100
+                                        parts[i] = percentageValue.toString()
+                                    }
+                                    "*", "/" -> {
+                                        val percentageValue = (num / 100)
+                                        parts[i] = percentageValue.toString()
+                                    }
                                 }
-                                "*", "/" -> {
-                                    newParts.removeAt(newParts.size - 1)
-                                    newParts.removeAt(newParts.size - 1)
-                                    val percentageValue = (num / 100)
-                                    newParts.add(prevNumber.toString())
-                                    newParts.add(prevOperator)
-                                    newParts.add(percentageValue.toString())
-                                }
-                                else -> newParts.add(part)
+                            } else {
+                                parts[i] = (num / 100).toString()
                             }
                         } else {
-                            newParts.add((num / 100).toString())
+                            parts[i] = (num / 100).toString()
                         }
-                    } else {
-                        newParts.add(part)
                     }
                     i++
                 }
-                expressionToEvaluate = newParts.joinToString("")
+                expressionToEvaluate = parts.joinToString("")
             }
-
 
             val result = eval(expressionToEvaluate)
 
-            textExpression.text = currentExpression
+            textExpression.text = currentExpression.trim()
             val formattedResult = if (result == result.toLong().toDouble()) {
                 result.toLong().toString()
             } else {
@@ -253,7 +272,7 @@ class MainActivity : ComponentActivity() {
             currentExpression = formattedResult
 
         } catch (e: DivisionByZeroException) {
-            Toast.makeText(this, "مأخدتش في الكلاس ان القسمة علي الصفر متنفعش 😂", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Can't divide by zero.", Toast.LENGTH_LONG).show()
             textResult.text = "0"
             currentExpression = ""
         } catch (e: Exception) {
