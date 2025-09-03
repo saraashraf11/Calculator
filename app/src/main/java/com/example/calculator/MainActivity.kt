@@ -121,10 +121,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun backspace() {
-        if (isNewCalculation) { // <-- هذا هو التعديل
+        if (isNewCalculation) {
             currentExpression = ""
             textResult.text = "0"
-            textExpression.text = "" // قد تحتاج لإعادة تعيين هذا أيضًا إذا كان يعرض التعبير السابق
+            textExpression.text = ""
         } else if (currentExpression.isNotEmpty()) {
             currentExpression = currentExpression.dropLast(1)
             textResult.text = if (currentExpression.isEmpty()) "0" else currentExpression
@@ -137,32 +137,44 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun toggleSign() {
-        if (currentExpression.isNotEmpty() && currentExpression != "0" && currentExpression != "Error") {
-            val operators = setOf('+', '-', 'x', '÷', '%')
-            var lastNumberStart = -1
+        if (currentExpression.isEmpty() || currentExpression == "0" || currentExpression == "Error") {
+            return // لا شيء لتغييره
+        }
 
-            for (i in currentExpression.length - 1 downTo 0) {
-                if (currentExpression[i] in operators) {
-                    lastNumberStart = i + 1
-                    break
-                }
-            }
+        val operators = setOf('+', '-', 'x', '÷') // لا نعتبر % عامل تشغيل للإشارة
 
-            if (lastNumberStart == -1) {
-                lastNumberStart = 0
-            }
+        var lastNumberStart = -1
+        var lastNumberEnd = currentExpression.length
 
-            val lastNumberStr = currentExpression.substring(lastNumberStart)
-
-            if (lastNumberStr.isNotEmpty()) {
-                val newNumberStr = if (lastNumberStr.startsWith("-")) {
-                    lastNumberStr.substring(1)
+        // البحث عن بداية آخر رقم
+        for (i in currentExpression.length - 1 downTo 0) {
+            if (currentExpression[i] in operators) {
+                // إذا كان العامل هو '-' وكان يسبق مباشرة رقم، فقد يكون جزءًا من الرقم السالب
+                // مثال: "5+-3" هنا '-' جزء من الرقم
+                // مثال: "5-3" هنا '-' عامل تشغيل
+                if (currentExpression[i] == '-' && (i == 0 || currentExpression[i-1] in operators || currentExpression[i-1] == '(')) {
+                    lastNumberStart = i // بدأ الرقم السالب هنا
                 } else {
-                    "-$lastNumberStr"
+                    lastNumberStart = i + 1 // الرقم يبدأ بعد العامل
                 }
-                currentExpression = currentExpression.substring(0, lastNumberStart) + newNumberStr
-                textResult.text = currentExpression
+                break
             }
+        }
+
+        if (lastNumberStart == -1) { // إذا لم يتم العثور على عامل تشغيل، فإن التعبير بأكمله هو رقم
+            lastNumberStart = 0
+        }
+
+        val lastNumberStr = currentExpression.substring(lastNumberStart, lastNumberEnd)
+
+        if (lastNumberStr.isNotEmpty()) {
+            val newNumberStr = if (lastNumberStr.startsWith("-")) {
+                lastNumberStr.substring(1) // إزالة الإشارة السالبة
+            } else {
+                "-$lastNumberStr" // إضافة الإشارة السالبة
+            }
+            currentExpression = currentExpression.substring(0, lastNumberStart) + newNumberStr
+            textResult.text = currentExpression
         }
     }
 
