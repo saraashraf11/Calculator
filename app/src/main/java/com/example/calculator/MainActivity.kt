@@ -121,7 +121,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun backspace() {
-        if (currentExpression.isNotEmpty()) {
+        if (isNewCalculation) { // <-- هذا هو التعديل
+            currentExpression = ""
+            textResult.text = "0"
+            textExpression.text = "" // قد تحتاج لإعادة تعيين هذا أيضًا إذا كان يعرض التعبير السابق
+        } else if (currentExpression.isNotEmpty()) {
             currentExpression = currentExpression.dropLast(1)
             textResult.text = if (currentExpression.isEmpty()) "0" else currentExpression
             if (currentExpression.isEmpty()) {
